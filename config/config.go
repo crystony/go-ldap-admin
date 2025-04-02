@@ -155,6 +155,7 @@ type LogsConfig struct {
 type Database struct {
 	Driver string `mapstructure:"driver" json:"driver"`
 	Source string `mapstructure:"source" json:"source"`
+	Dsn    string `mapstructure:"dsn" json:"dsn"`
 }
 
 type MysqlConfig struct {

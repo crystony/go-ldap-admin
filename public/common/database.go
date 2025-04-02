@@ -2,12 +2,11 @@ package common
 
 import (
 	"fmt"
-
 	"github.com/eryajf/go-ldap-admin/config"
 	"github.com/eryajf/go-ldap-admin/model"
-
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -21,6 +20,8 @@ func InitDB() {
 		DB = ConnMysql()
 	case "sqlite3":
 		DB = ConnSqlite()
+	case "postgres":
+		DB = ConnPostgres()
 	}
 	dbAutoMigrate()
 }
@@ -89,5 +90,23 @@ func ConnMysql() *gorm.DB {
 		db.Debug()
 	}
 	Log.Infof("初始化mysql数据库完成! dsn: %s", showDsn)
+	return db
+}
+
+func ConnPostgres() *gorm.DB {
+	db, err := gorm.Open(postgres.Open(config.Conf.Database.Dsn), &gorm.Config{
+		// 禁用外键(指定外键时不会在mysql创建真实的外键约束)
+		DisableForeignKeyConstraintWhenMigrating: true,
+		//Logger: gormLogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormLogger.Config{
+		//	SlowThreshold:             200 * time.Millisecond,
+		//	LogLevel:                  gormLogger.Info,
+		//	Colorful:                  true,
+		//	IgnoreRecordNotFoundError: true,
+		//}),
+	})
+	if err != nil {
+		Log.Panicf("初始化postgres数据库异常: %v", err)
+	}
+	Log.Info("初始化postgres数据库完成!")
 	return db
 }

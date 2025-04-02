@@ -2,7 +2,6 @@ package common
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"sync"
@@ -113,7 +112,7 @@ func (lcp *LdapConnPool) GetConnection() (*ldap.Conn, error) {
 }
 
 func (lcp *LdapConnPool) PutConnection(conn *ldap.Conn) {
-	log.Println("放回了一个 LDAP 连接")
+	Log.Info("放回了一个 LDAP 连接")
 	lcp.mu.Lock()
 	defer lcp.mu.Unlock()
 

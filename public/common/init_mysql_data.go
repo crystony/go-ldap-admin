@@ -3,6 +3,8 @@ package common
 import (
 	"errors"
 	"fmt"
+	"github.com/go-ldap/ldap/v3"
+	"reflect"
 
 	"github.com/eryajf/go-ldap-admin/config"
 	"github.com/eryajf/go-ldap-admin/model"
@@ -837,4 +839,88 @@ func InitData() {
 			Log.Errorf("写入关系数据失败：%v", err)
 		}
 	}
+	resetIdSeq()
+	InitLdapData()
+}
+
+func resetIdSeq() {
+	ms := []any{
+		model.User{},
+		model.Role{},
+		model.Group{},
+		model.Menu{},
+		model.Api{},
+		model.OperationLog{},
+		model.FieldRelation{},
+	}
+	switch config.Conf.Database.Driver {
+	case "postgres":
+		for _, m := range ms {
+			tblName := DB.NamingStrategy.TableName(reflect.TypeOf(m).Name())
+			sql := fmt.Sprintf(`SELECT setval(pg_get_serial_sequence('%s', 'id'),COALESCE((SELECT MAX(id) FROM %s), 1)+1,false)`, tblName, tblName)
+			err := DB.Exec(sql).Error
+			if err != nil {
+				Log.Errorf("重置自增ID失败：%v", err)
+			}
+		}
+	}
+}
+
+func InitLdapData() {
+	// 获取 LDAP 连接
+	conn, err := GetLDAPConn()
+	defer PutLADPConn(conn)
+	if err != nil {
+		Log.Errorf("初始化Ldap数据失败：%v", err)
+	}
+	baseDn := config.Conf.Ldap.BaseDN
+
+	items := make([]*ldap.AddRequest, 0)
+
+	people := ldap.NewAddRequest(fmt.Sprintf("ou=people,%s", baseDn), nil)
+	people.Attributes = []ldap.Attribute{
+		{Type: "ou", Vals: []string{"people"}},
+		{Type: "description", Vals: []string{"用户根目录"}},
+		{Type: "objectClass", Vals: []string{"organizationalUnit"}},
+	}
+
+	dingtalkroot := ldap.NewAddRequest(fmt.Sprintf("ou=dingtalkroot,%s", baseDn), nil)
+	dingtalkroot.Attributes = []ldap.Attribute{
+		{Type: "ou", Vals: []string{"dingtalkroot"}},
+		{Type: "description", Vals: []string{"钉钉根部门"}},
+		{Type: "objectClass", Vals: []string{"organizationalUnit", "top"}},
+	}
+	wecomroot := ldap.NewAddRequest(fmt.Sprintf("ou=wecomroot,%s", baseDn), nil)
+	wecomroot.Attributes = []ldap.Attribute{
+		{Type: "ou", Vals: []string{"wecomroot"}},
+		{Type: "description", Vals: []string{"企业微信根部门"}},
+		{Type: "objectClass", Vals: []string{"organizationalUnit", "top"}},
+	}
+	feishuroot := ldap.NewAddRequest(fmt.Sprintf("ou=feishuroot,%s", baseDn), nil)
+	feishuroot.Attributes = []ldap.Attribute{
+		{Type: "ou", Vals: []string{"feishuroot"}},
+		{Type: "description", Vals: []string{"飞书根部门"}},
+		{Type: "objectClass", Vals: []string{"organizationalUnit", "top"}},
+	}
+	group := ldap.NewAddRequest(fmt.Sprintf("cn=group,%s", baseDn), nil)
+	group.Attributes = []ldap.Attribute{
+		{Type: "cn", Vals: []string{"group"}},
+		{Type: "description", Vals: []string{"默认分组"}},
+		{Type: "objectClass", Vals: []string{"groupOfUniqueNames", "top"}},
+		{Type: "uniqueMember", Vals: []string{config.Conf.Ldap.AdminDN}},
+	}
+
+	items = append(items, people, dingtalkroot, wecomroot, feishuroot, group)
+	for _, item := range items {
+		err = conn.Add(item)
+		if err != nil {
+			var e *ldap.Error
+			if errors.As(err, &e) && e.ResultCode == 68 {
+				// 忽略重复添加的错误
+			} else {
+				Log.Errorf("初始化Ldap数据失败：%v", err)
+			}
+		}
+	}
+	Log.Errorf("初始化Ldap数据完成")
 }
